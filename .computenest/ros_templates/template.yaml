@@ -5,6 +5,23 @@ Conditions:
       - NewVPC
       - Ref: VpcOption
 Parameters:
+  Admin_Email:
+    Type: String
+    Label:
+      en: Admin Email
+      zh-cn: 管理员邮箱
+  GITHUB_CLIENT_ID:
+    Type: String
+    Label:
+      en: Github OAuth App Client Id(Optional)
+      zh-cn: Github OAuth应用ID(可选)
+    Default: ""
+  GITHUB_CLIENT_SECRET:
+    Type: String
+    Label:
+      en: Github OAuth App Client Secret(Optional)
+      zh-cn: Github OAuth应用秘钥(可选)
+    Default: ""
   VpcOption:
     Type: String
     AllowedValues:
@@ -199,7 +216,7 @@ Resources:
         Ref: ALIYUN::StackName
       RedirectUris:
         - Fn::Sub:
-            - http://${ServerAddress}:8080/
+            - http://${ServerAddress}:8080/api/auth/callback/custom-oauth
             - ServerAddress:
                 Fn::Select:
                   - 0
@@ -304,8 +321,8 @@ Resources:
     Properties:
       InstanceIds:
         Fn::GetAtt:
-        - InstanceGroup
-        - InstanceIds
+          - InstanceGroup
+          - InstanceIds
       Type: RunShellScript
       Sync: true
       Timeout: 3600
@@ -336,12 +353,30 @@ Resources:
             # 要替换的文件路径
             FILE_PATH="/root/application/docker_compose/.env"            
             # 替换文件中的环境变量
-            sed -i "s|^NEXTAUTH_URL=.*|NEXTAUTH_URL=!${NEXTAUTH_URL}|g" "$FILE_PATH"
-            sed -i "s|^NEXT_PUBLIC_VIEWER_URL=.*|NEXT_PUBLIC_VIEWER_URL=!${NEXTAUTH_URL}|g" "$FILE_PATH"
-            sed -i "s|^CUSTOM_OAUTH_CLIENT_ID=.*|CUSTOM_OAUTH_CLIENT_ID=!${CUSTOM_OAUTH_CLIENT_ID}|g" "$FILE_PATH"
-            sed -i "s|^CUSTOM_OAUTH_CLIENT_SECRET=.*|CUSTOM_OAUTH_CLIENT_SECRET=!${CUSTOM_OAUTH_CLIENT_SECRET}|g" "$FILE_PATH"
-            sed -i "s|^CUSTOM_OAUTH_WELL_KNOWN_URL=.*|CUSTOM_OAUTH_WELL_KNOWN_URL=https://oauth.aliyun.com/.well-known/openid-configuration|g" "$FILE_PATH"
-            sed -i "s|^CUSTOM_OAUTH_SCOPE=.*|CUSTOM_OAUTH_SCOPE="openid aliuid profile"|g" "$FILE_PATH"
+            sed -i "s|^NEXTAUTH_URL=.*|NEXTAUTH_URL=${NEXTAUTH_URL}|g" "$FILE_PATH"
+            sed -i "s|^NEXT_PUBLIC_VIEWER_URL=.*|NEXT_PUBLIC_VIEWER_URL=${NEXTAUTH_URL}|g" "$FILE_PATH"
+            if [ -n "$(tail -c 1 "$FILE_PATH")" ]; then
+              echo "" >> "$FILE_PATH"  # 如果没有换行，则添加一个
+            fi
+            echo "CUSTOM_OAUTH_NAME=Alibaba Cloud" >> "$FILE_PATH"
+            echo "CUSTOM_OAUTH_CLIENT_ID=${CUSTOM_OAUTH_CLIENT_ID}" >> "$FILE_PATH"
+            echo "CUSTOM_OAUTH_CLIENT_SECRET=${CUSTOM_OAUTH_CLIENT_SECRET}" >> "$FILE_PATH"
+            echo "CUSTOM_OAUTH_WELL_KNOWN_URL=https://oauth.aliyun.com/.well-known/openid-configuration" >> "$FILE_PATH"
+            echo "CUSTOM_OAUTH_SCOPE=openid aliuid profile" >> "$FILE_PATH"
+            echo "CUSTOM_OAUTH_USER_ID_PATH=uid" >> "$FILE_PATH"
+            echo "CUSTOM_OAUTH_USER_EMAIL_PATH=aid" >> "$FILE_PATH"
+            echo "ADMIN_EMAIL=${Admin_Email}" >> "$FILE_PATH"                          
+            echo "DEFAULT_WORKSPACE_PLAN=UNLIMITED" >> "$FILE_PATH"                          
+
+            # 检查并写入 GITHUB_CLIENT_ID
+            if [ -n "${GITHUB_CLIENT_ID}" ]; then
+                echo "GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}" >> "$FILE_PATH"
+            fi
+
+            # 检查并写入 GITHUB_CLIENT_SECRET
+            if [ -n "${GITHUB_CLIENT_SECRET}" ]; then
+                echo "GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}" >> "$FILE_PATH"
+            fi
             systemctl start docker-compose-app
           - RegionId:
               Ref: ALIYUN::Region
@@ -362,6 +397,12 @@ Resources:
               Fn::GetAtt:
                 - AppSecret
                 - AppSecretValue
+            GITHUB_CLIENT_SECRET:
+              Ref: GITHUB_CLIENT_SECRET
+            GITHUB_CLIENT_ID:
+              Ref: GITHUB_CLIENT_ID
+            Admin_Email:
+              Ref: Admin_Email
 Outputs:
   ServerAddress:
     Description:
@@ -369,13 +410,26 @@ Outputs:
       zh-cn: 访问页面。
     Value:
       Fn::Sub:
-        - http://${ServerAddress}:8080, http://${ServerAddress}:8081
+        - http://${ServerAddress}:8080
         - ServerAddress:
             Fn::Select:
-            - 0
-            - Fn::GetAtt:
-              - InstanceGroup
-              - PublicIps
+              - 0
+              - Fn::GetAtt:
+                  - InstanceGroup
+                  - PublicIps
+  ServerAddress1:
+    Description:
+      en: ServerAddress1.
+      zh-cn: 访问页面1。
+    Value:
+      Fn::Sub:
+        - http://${ServerAddress}:8081
+        - ServerAddress:
+            Fn::Select:
+              - 0
+              - Fn::GetAtt:
+                  - InstanceGroup
+                  - PublicIps
 Metadata:
   ALIYUN::ROS::Interface:
     ParameterGroups:
@@ -384,12 +438,14 @@ Metadata:
           - PayPeriodUnit
           - PayPeriod
         Label:
-          default: 付费类型配置
+          zh-cn: 付费类型配置
+          en: Payment Type Configuration
       - Parameters:
           - EcsInstanceType
           - InstancePassword
         Label:
-          default: 资源配置
+          zh-cn: 资源配置
+          en: Resouces Configuration
       - Parameters:
           - ZoneId
           - VpcOption
@@ -398,5 +454,13 @@ Metadata:
           - VpcCidrBlock
           - VSwitchCidrBlock
         Label:
-          default: 可用区配置
+          zh-cn: 可用区配置
+          en: Availability Zone Configuration
+      - Parameters:
+          - Admin_Email
+          - GITHUB_CLIENT_ID
+          - GITHUB_CLIENT_SECRET
+        Label:
+          zh-cn: 软件配置
+          en: Software Configuration
       
