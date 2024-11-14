@@ -188,6 +188,40 @@ Parameters:
             - ExistingVPC
             - ${VpcOption}
 Resources:
+  OAuthApp:
+    Type: 'ALIYUN::RAM::Application'
+    DependsOn: InstanceGroup
+    Properties:
+      DisplayName:
+        Ref: ALIYUN::StackName
+      AppType: "WebApp"
+      AppName:
+        Ref: ALIYUN::StackName
+      RedirectUris:
+        - Fn::Sub:
+            - http://${ServerAddress}:8080/
+            - ServerAddress:
+                Fn::Select:
+                  - 0
+                  - Fn::GetAtt:
+                      - InstanceGroup
+                      - PublicIps
+      SecretRequired: True
+      RequiredScopes:
+        - openid
+        - aliuid
+        - profile
+      PredefinedScopes:
+        - openid
+        - aliuid
+        - profile
+  AppSecret:
+    Type: 'ALIYUN::RAM::AppSecret'
+    Properties:
+      AppId:
+        Fn::GetAtt:
+          - OAuthApp
+          - AppId
   # 新建vpc
   EcsVpc:
     Type: ALIYUN::ECS::VPC
@@ -299,10 +333,35 @@ Resources:
             WantedBy=multi-user.target
             EOF
 
-            
+            # 要替换的文件路径
+            FILE_PATH="/root/application/docker_compose/.env"            
+            # 替换文件中的环境变量
+            sed -i "s|^NEXTAUTH_URL=.*|NEXTAUTH_URL=!${NEXTAUTH_URL}|g" "$FILE_PATH"
+            sed -i "s|^NEXT_PUBLIC_VIEWER_URL=.*|NEXT_PUBLIC_VIEWER_URL=!${NEXTAUTH_URL}|g" "$FILE_PATH"
+            sed -i "s|^CUSTOM_OAUTH_CLIENT_ID=.*|CUSTOM_OAUTH_CLIENT_ID=!${CUSTOM_OAUTH_CLIENT_ID}|g" "$FILE_PATH"
+            sed -i "s|^CUSTOM_OAUTH_CLIENT_SECRET=.*|CUSTOM_OAUTH_CLIENT_SECRET=!${CUSTOM_OAUTH_CLIENT_SECRET}|g" "$FILE_PATH"
+            sed -i "s|^CUSTOM_OAUTH_WELL_KNOWN_URL=.*|CUSTOM_OAUTH_WELL_KNOWN_URL=https://oauth.aliyun.com/.well-known/openid-configuration|g" "$FILE_PATH"
+            sed -i "s|^CUSTOM_OAUTH_SCOPE=.*|CUSTOM_OAUTH_SCOPE="openid aliuid profile"|g" "$FILE_PATH"
             systemctl start docker-compose-app
           - RegionId:
               Ref: ALIYUN::Region
+            NEXTAUTH_URL:
+              Fn::Sub:
+                - http://${ServerAddress}:8080/
+                - ServerAddress:
+                    Fn::Select:
+                      - 0
+                      - Fn::GetAtt:
+                          - InstanceGroup
+                          - PublicIps
+            CUSTOM_OAUTH_CLIENT_ID:
+              Fn::GetAtt:
+                - OAuthApp
+                - AppId
+            CUSTOM_OAUTH_CLIENT_SECRET:
+              Fn::GetAtt:
+                - AppSecret
+                - AppSecretValue
 Outputs:
   ServerAddress:
     Description:
