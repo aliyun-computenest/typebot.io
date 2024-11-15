@@ -414,7 +414,7 @@ Metadata:
           - InstancePassword
         Label:
           zh-cn: 资源配置
-          en: Resouces Configuration
+          en: Resources Configuration
       - Parameters:
           - ZoneId
           - VpcOption
